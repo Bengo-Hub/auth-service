@@ -1,0 +1,28 @@
+# Binaries
+/bin/
+/dist/
+/build/
+*.exe
+*.dll
+*.so
+
+# Go build cache
+/coverage.out
+/profile.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Environment & secrets
+.env
+.env.*
+/config/local.yaml
+.DS_Store
+
+# Generated
+/docs/openapi/*
+/internal/ent/migrate/schema/*
+
+
