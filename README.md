@@ -53,9 +53,16 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`. In pr
   openssl genrsa -out config/keys/dev_jwt_private.pem 4096
   openssl rsa -in config/keys/dev_jwt_private.pem -pubout -out config/keys/dev_jwt_public.pem
   ```
+  Windows PowerShell:
+  ```powershell
+  New-Item -ItemType Directory -Force -Path .\config\keys | Out-Null
+  openssl genrsa -out .\config\keys\dev_jwt_private.pem 4096
+  openssl rsa -in .\config\keys\dev_jwt_private.pem -pubout -out .\config\keys\dev_jwt_public.pem
+  ```
 - Provide Postgres + Redis connection strings via `AUTH_DB_URL` and `AUTH_REDIS_ADDR`. Redis powers rate-limits/blacklists (future sprint) but is already initialised for health checks.
 - To enable Google OAuth, set `AUTH_PROVIDERS_GOOGLE_ENABLED=true` together with `CLIENT_ID`, `CLIENT_SECRET`, and `REDIRECT_URL` (normally `https://auth.bengobox.com/api/v1/auth/oauth/google/callback`).  
   Use `AUTH_SECURITY_OAUTH_STATE_SECRET` (32+ random bytes) to sign OAuth state tokens and optionally restrict tenants by domain via `AUTH_PROVIDERS_GOOGLE_ALLOWED_DOMAINS=example.com,contoso.com`.
+ - Redis note: If you see a log like “maint_notifications disabled due to handshake error,” it’s a harmless fallback in the Redis client and can be ignored for local use. Upgrading Redis to 7.2+ removes the warning.
 
 ### Documentation
 

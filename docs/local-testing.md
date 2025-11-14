@@ -13,6 +13,14 @@ openssl genrsa -out config/keys/dev_jwt_private.pem 4096
 openssl rsa -in config/keys/dev_jwt_private.pem -pubout -out config/keys/dev_jwt_public.pem
 ```
 
+On Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force -Path .\config\keys | Out-Null
+openssl genrsa -out .\config\keys\dev_jwt_private.pem 4096
+openssl rsa -in .\config\keys\dev_jwt_private.pem -pubout -out .\config\keys\dev_jwt_public.pem
+```
+
 Copy and edit env:
 
 ```bash
@@ -52,6 +60,8 @@ You should see it listening on `http://localhost:4101`.
 - Health: `curl http://localhost:4101/healthz`
 - JWKS: `curl http://localhost:4101/api/v1/.well-known/jwks.json`
 - Login: `POST /api/v1/auth/login` with `{ "email":"admin@codevertexitsolutions.com","password":"ChangeMe123!","tenant_slug":"bengobox" }`
+
+Note on Redis: If you see a warning like “maint_notifications disabled due to handshake error,” it’s a harmless client fallback and safe to ignore locally. Upgrading Redis to 7.2+ removes it.
 
 ## 6) (Optional) Dockerizing the Service
 
