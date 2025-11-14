@@ -1,0 +1,85 @@
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/caarlos0/env/v11"
+)
+
+// Config aggregates all runtime settings.
+type Config struct {
+	App      AppConfig      `envPrefix:"AUTH_"`
+	HTTP     HTTPConfig     `envPrefix:"AUTH_HTTP_"`
+	Database DatabaseConfig `envPrefix:"AUTH_DB_"`
+	Redis    RedisConfig    `envPrefix:"AUTH_REDIS_"`
+	Token    TokenConfig    `envPrefix:"AUTH_TOKEN_"`
+	Security SecurityConfig `envPrefix:"AUTH_SECURITY_"`
+}
+
+type AppConfig struct {
+	Environment string `env:"ENV" envDefault:"development"`
+	ServiceName string `env:"SERVICE_NAME" envDefault:"auth-service"`
+}
+
+type HTTPConfig struct {
+	Host              string        `env:"HOST" envDefault:"0.0.0.0"`
+	Port              int           `env:"PORT" envDefault:"4101"`
+	ReadTimeout       time.Duration `env:"READ_TIMEOUT" envDefault:"5s"`
+	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT" envDefault:"10s"`
+	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT" envDefault:"120s"`
+	ReadHeaderTimeout time.Duration `env:"READ_HEADER_TIMEOUT" envDefault:"5s"`
+	ShutdownTimeout   time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"25s"`
+}
+
+type DatabaseConfig struct {
+	URL             string        `env:"URL"`
+	MaxOpenConns    int           `env:"MAX_OPEN_CONNS" envDefault:"20"`
+	MaxIdleConns    int           `env:"MAX_IDLE_CONNS" envDefault:"5"`
+	ConnMaxLifetime time.Duration `env:"CONN_MAX_LIFETIME" envDefault:"30m"`
+	RunMigrations   bool          `env:"RUN_MIGRATIONS" envDefault:"true"`
+}
+
+type RedisConfig struct {
+	Addr      string `env:"ADDR" envDefault:"127.0.0.1:6379"`
+	Password  string `env:"PASSWORD"`
+	DB        int    `env:"DB" envDefault:"0"`
+	EnableTLS bool   `env:"ENABLE_TLS" envDefault:"false"`
+	Namespace string `env:"NAMESPACE" envDefault:"auth"`
+}
+
+type TokenConfig struct {
+	Issuer              string        `env:"ISSUER" envDefault:"https://auth.bengobox.local"`
+	Audience            string        `env:"AUDIENCE" envDefault:"bengobox"`
+	PrivateKeyPath      string        `env:"PRIVATE_KEY_PATH"`
+	PublicKeyPath       string        `env:"PUBLIC_KEY_PATH"`
+	AccessTokenTTL      time.Duration `env:"ACCESS_TTL" envDefault:"15m"`
+	RefreshTokenTTL     time.Duration `env:"REFRESH_TTL" envDefault:"720h"`
+	RotateRefreshTokens bool          `env:"ROTATE_REFRESH" envDefault:"true"`
+	DefaultScopes       []string      `env:"DEFAULT_SCOPES" envSeparator:"," envDefault:"profile,email,offline_access"`
+}
+
+type SecurityConfig struct {
+	PasswordMinLength int    `env:"PASSWORD_MIN_LENGTH" envDefault:"12"`
+	Argon2Time        uint32 `env:"ARGON2_TIME" envDefault:"3"`
+	Argon2Memory      uint32 `env:"ARGON2_MEMORY" envDefault:"65536"`
+	Argon2Threads     uint8  `env:"ARGON2_THREADS" envDefault:"2"`
+	Argon2KeyLength   uint32 `env:"ARGON2_KEY_LENGTH" envDefault:"32"`
+}
+
+// Load parses environment variables into Config and performs validation.
+func Load() (*Config, error) {
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("parse env: %w", err)
+	}
+
+	if cfg.Database.URL == "" {
+		return nil, fmt.Errorf("AUTH_DB_URL is required")
+	}
+	if cfg.Token.PrivateKeyPath == "" || cfg.Token.PublicKeyPath == "" {
+		return nil, fmt.Errorf("AUTH_TOKEN_PRIVATE_KEY_PATH and AUTH_TOKEN_PUBLIC_KEY_PATH are required")
+	}
+
+	return cfg, nil
+}

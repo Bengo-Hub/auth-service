@@ -23,19 +23,41 @@ It exposes standards-compliant OAuth2/OpenID Connect flows to web, mobile, POS, 
 ## Local Development
 
 ```shell
-# bootstrap dependencies
-cp config/example.env .env
-make deps
+# install dependencies & generate Ent code
+go generate ./internal/ent
 
-# run postgres/redis
+# (optional) spin up infra
 docker compose up -d postgres redis
 
-# generate Ent code & run service
-go generate ./internal/ent
+# run the API
+AUTH_ENV=development AUTH_DB_URL=postgres://... \
+AUTH_TOKEN_PRIVATE_KEY_PATH=./config/keys/dev_jwt_private.pem \
+AUTH_TOKEN_PUBLIC_KEY_PATH=./config/keys/dev_jwt_public.pem \
 go run ./cmd/server
 ```
 
 Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`.
+
+### Configuration & Secrets
+
+- Copy `config/example.env` and adjust values or export them with your preferred secret manager.
+- Generate RSA keys for JWT signing (4096-bit recommended):
+  ```shell
+  openssl genrsa -out config/keys/dev_jwt_private.pem 4096
+  openssl rsa -in config/keys/dev_jwt_private.pem -pubout -out config/keys/dev_jwt_public.pem
+  ```
+- Provide Postgres + Redis connection strings via `AUTH_DB_URL` and `AUTH_REDIS_ADDR`. Redis powers rate-limits/blacklists (future sprint) but is already initialised for health checks.
+
+### HTTP Surface (Sprint 2)
+
+| Method | Path                              | Description                     |
+|--------|-----------------------------------|---------------------------------|
+| POST   | `/api/v1/auth/register`           | Create user + tenant membership |
+| POST   | `/api/v1/auth/login`              | Email/password login            |
+| POST   | `/api/v1/auth/refresh`            | Rotate refresh token + JWT      |
+| POST   | `/api/v1/auth/password-reset/*`   | Request/confirm reset tokens    |
+| GET    | `/api/v1/auth/me`                 | Returns authenticated profile   |
+| GET    | `/healthz`                        | Liveness probe                  |
 
 ## Project Structure
 

@@ -83,17 +83,17 @@
 - Localization/internationalization for login UI, policy, and notifications.
 
 ### Roadmap (Indicative Sprints)
-1. **Sprint 0 – Foundations:** project scaffold, config, logging, health checks, CI/CD, ent base schema (users, clients, tenants).
-2. **Sprint 1 – Local Auth Basics:** registration, login, password reset, hashed storage, audit logging.
-3. **Sprint 2 – Token Service:** JWT issuance, refresh tokens, middleware, protected `/me` endpoint, Postgres/Redis integration.
-4. **Sprint 3 – External Providers:** Google OAuth, account linking, social login UI, provider configuration.
-5. **Sprint 4 – OIDC Compliance:** Authorization Code + PKCE, discovery docs, JWKS, userinfo, consent flows.
-6. **Sprint 5 – Sessions & Logout:** multi-device session management, revocation, global logout propagation, security events.
-7. **Sprint 6 – MFA & Risk Controls:** TOTP, backup codes, policies, integration with notifications for SMS/email OTP.
-8. **Sprint 7 – Tenant & Client Admin:** tenant management APIs, client registry UI, scope management, service accounts.
-9. **Sprint 8 – Subscription & Usage:** entitlement checks (treasury), usage metering, plan gating, billing events.
-10. **Sprint 9 – Integrations:** SDKs, service integration guides, migration of existing services, SSO across BengoBox apps.
-11. **Sprint 10 – Hardening & Launch:** key rotation workflows, rate limiting, analytics, monitoring dashboards, chaos testing, production rollout.
+- [x] **Sprint 0 – Foundations:** Server bootstrap (`cmd/server`), structured config loader, zap logging, Redis/Postgres clients, health endpoint, Ent schema (users, tenants, memberships, OAuth clients, audit, sessions, reset tokens, login attempts).
+- [x] **Sprint 1 – Local Auth Basics:** Argon2id hashing, registration/login flows with tenant membership enforcement, password reset issuance & confirmation, audit logging, login attempt tracking, validation + error handling.
+- [x] **Sprint 2 – Token Service:** RSA-backed JWT minting/verification, refresh token rotation with session persistence, `/auth/refresh` + `/auth/me` endpoints, auth middleware, session telemetry updates.
+- [ ] **Sprint 3 – External Providers:** Google OAuth, account linking, social login UI, provider configuration.
+- [ ] **Sprint 4 – OIDC Compliance:** Authorization Code + PKCE, discovery docs, JWKS, userinfo, consent flows.
+- [ ] **Sprint 5 – Sessions & Logout:** multi-device session management, revocation, global logout propagation, security events.
+- [ ] **Sprint 6 – MFA & Risk Controls:** TOTP, backup codes, policies, integration with notifications for SMS/email OTP.
+- [ ] **Sprint 7 – Tenant & Client Admin:** tenant management APIs, client registry UI, scope management, service accounts.
+- [ ] **Sprint 8 – Subscription & Usage:** entitlement checks (treasury), usage metering, plan gating, billing events.
+- [ ] **Sprint 9 – Integrations:** SDKs, service integration guides, migration of existing services, SSO across BengoBox apps.
+- [ ] **Sprint 10 – Hardening & Launch:** key rotation workflows, rate limiting, analytics, monitoring dashboards, chaos testing, production rollout.
 
 ### Backlog & Future Enhancements
 - FIDO2/WebAuthn, push-based MFA.
