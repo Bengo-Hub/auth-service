@@ -9,12 +9,13 @@ import (
 
 // Config aggregates all runtime settings.
 type Config struct {
-	App      AppConfig      `envPrefix:"AUTH_"`
-	HTTP     HTTPConfig     `envPrefix:"AUTH_HTTP_"`
-	Database DatabaseConfig `envPrefix:"AUTH_DB_"`
-	Redis    RedisConfig    `envPrefix:"AUTH_REDIS_"`
-	Token    TokenConfig    `envPrefix:"AUTH_TOKEN_"`
-	Security SecurityConfig `envPrefix:"AUTH_SECURITY_"`
+	App       AppConfig       `envPrefix:"AUTH_"`
+	HTTP      HTTPConfig      `envPrefix:"AUTH_HTTP_"`
+	Database  DatabaseConfig  `envPrefix:"AUTH_DB_"`
+	Redis     RedisConfig     `envPrefix:"AUTH_REDIS_"`
+	Token     TokenConfig     `envPrefix:"AUTH_TOKEN_"`
+	Security  SecurityConfig  `envPrefix:"AUTH_SECURITY_"`
+	Providers ProvidersConfig `envPrefix:"AUTH_PROVIDERS_"`
 }
 
 type AppConfig struct {
@@ -65,6 +66,19 @@ type SecurityConfig struct {
 	Argon2Memory      uint32 `env:"ARGON2_MEMORY" envDefault:"65536"`
 	Argon2Threads     uint8  `env:"ARGON2_THREADS" envDefault:"2"`
 	Argon2KeyLength   uint32 `env:"ARGON2_KEY_LENGTH" envDefault:"32"`
+	OAuthStateSecret  string `env:"OAUTH_STATE_SECRET"`
+}
+
+type ProvidersConfig struct {
+	Google GoogleProviderConfig `envPrefix:"GOOGLE_"`
+}
+
+type GoogleProviderConfig struct {
+	Enabled        bool     `env:"ENABLED" envDefault:"false"`
+	ClientID       string   `env:"CLIENT_ID"`
+	ClientSecret   string   `env:"CLIENT_SECRET"`
+	RedirectURL    string   `env:"REDIRECT_URL"`
+	AllowedDomains []string `env:"ALLOWED_DOMAINS" envSeparator:","`
 }
 
 // Load parses environment variables into Config and performs validation.
@@ -79,6 +93,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.Token.PrivateKeyPath == "" || cfg.Token.PublicKeyPath == "" {
 		return nil, fmt.Errorf("AUTH_TOKEN_PRIVATE_KEY_PATH and AUTH_TOKEN_PUBLIC_KEY_PATH are required")
+	}
+
+	if cfg.Providers.Google.Enabled {
+		if cfg.Providers.Google.ClientID == "" || cfg.Providers.Google.ClientSecret == "" || cfg.Providers.Google.RedirectURL == "" {
+			return nil, fmt.Errorf("google oauth requires CLIENT_ID, CLIENT_SECRET, and REDIRECT_URL")
+		}
+		if cfg.Security.OAuthStateSecret == "" {
+			return nil, fmt.Errorf("AUTH_SECURITY_OAUTH_STATE_SECRET is required when Google OAuth is enabled")
+		}
 	}
 
 	return cfg, nil

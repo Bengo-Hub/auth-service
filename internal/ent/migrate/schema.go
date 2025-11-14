@@ -185,6 +185,48 @@ var (
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 	}
+	// UserIdentitiesColumns holds the columns for the "user_identities" table.
+	UserIdentitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "provider", Type: field.TypeString},
+		{Name: "provider_subject", Type: field.TypeString},
+		{Name: "provider_email", Type: field.TypeString},
+		{Name: "email_verified", Type: field.TypeBool, Default: false},
+		{Name: "access_token", Type: field.TypeString, Nullable: true},
+		{Name: "refresh_token", Type: field.TypeString, Nullable: true},
+		{Name: "token_expiry", Type: field.TypeTime, Nullable: true},
+		{Name: "scope", Type: field.TypeString, Nullable: true},
+		{Name: "profile", Type: field.TypeJSON, Nullable: true},
+		{Name: "linked_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// UserIdentitiesTable holds the schema information for the "user_identities" table.
+	UserIdentitiesTable = &schema.Table{
+		Name:       "user_identities",
+		Columns:    UserIdentitiesColumns,
+		PrimaryKey: []*schema.Column{UserIdentitiesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_identities_users_identities",
+				Columns:    []*schema.Column{UserIdentitiesColumns[12]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "useridentity_provider_provider_subject",
+				Unique:  true,
+				Columns: []*schema.Column{UserIdentitiesColumns[1], UserIdentitiesColumns[2]},
+			},
+			{
+				Name:    "useridentity_provider_provider_email",
+				Unique:  false,
+				Columns: []*schema.Column{UserIdentitiesColumns[1], UserIdentitiesColumns[3]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AuditLogsTable,
@@ -195,6 +237,7 @@ var (
 		TenantsTable,
 		TenantMembershipsTable,
 		UsersTable,
+		UserIdentitiesTable,
 	}
 )
 
@@ -203,4 +246,5 @@ func init() {
 	SessionsTable.ForeignKeys[0].RefTable = UsersTable
 	TenantMembershipsTable.ForeignKeys[0].RefTable = TenantsTable
 	TenantMembershipsTable.ForeignKeys[1].RefTable = UsersTable
+	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 }

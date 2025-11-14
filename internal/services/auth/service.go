@@ -19,10 +19,14 @@ import (
 	"github.com/bengobox/auth-service/internal/ent/tenant"
 	"github.com/bengobox/auth-service/internal/ent/tenantmembership"
 	"github.com/bengobox/auth-service/internal/ent/user"
+	"github.com/bengobox/auth-service/internal/ent/useridentity"
+	"github.com/bengobox/auth-service/internal/oauth/state"
 	"github.com/bengobox/auth-service/internal/password"
+	googleprovider "github.com/bengobox/auth-service/internal/providers/google"
 	"github.com/bengobox/auth-service/internal/token"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 var (
@@ -36,6 +40,19 @@ var (
 	ErrPasswordResetTokenInvalid = errors.New("password reset token invalid or expired")
 	// ErrEmailAlreadyExists indicates duplicate registration.
 	ErrEmailAlreadyExists = errors.New("user with email already exists")
+	// ErrProviderNotEnabled indicates the requested OAuth provider is disabled.
+	ErrProviderNotEnabled = errors.New("oauth provider not enabled")
+	// ErrOAuthStateInvalid indicates malformed state payload.
+	ErrOAuthStateInvalid = errors.New("oauth state invalid")
+	// ErrEmailNotVerified indicates provider did not verify the email address.
+	ErrEmailNotVerified = errors.New("provider email not verified")
+	// ErrEmailDomainNotAllowed indicates the email domain is not in the allowed list.
+	ErrEmailDomainNotAllowed = errors.New("email domain not allowed")
+)
+
+const (
+	oauthStateTTL      = 10 * time.Minute // 10 minutes
+	googleProviderName = "google"
 )
 
 // Service encapsulates core authentication flows.
@@ -46,6 +63,7 @@ type Service struct {
 	cfg       *config.Config
 	auditor   *audit.Logger
 	logger    *zap.Logger
+	google    *googleprovider.Provider
 }
 
 // Dependencies aggregates constructor inputs.
@@ -56,6 +74,7 @@ type Dependencies struct {
 	Config    *config.Config
 	Auditor   *audit.Logger
 	Logger    *zap.Logger
+	Google    *googleprovider.Provider
 }
 
 // New initialises the auth service.
@@ -67,6 +86,7 @@ func New(deps Dependencies) *Service {
 		cfg:       deps.Config,
 		auditor:   deps.Auditor,
 		logger:    deps.Logger,
+		google:    deps.Google,
 	}
 }
 
@@ -97,6 +117,24 @@ type RefreshInput struct {
 	ClientID     string
 	IPAddress    string
 	UserAgent    string
+}
+
+// OAuthStartInput defines payload for initiating external auth.
+type OAuthStartInput struct {
+	TenantSlug  string
+	ClientID    string
+	Flow        string
+	RedirectURI string
+	IPAddress   string
+	UserAgent   string
+}
+
+// OAuthCallbackInput defines provider callback payload.
+type OAuthCallbackInput struct {
+	Code      string
+	State     string
+	IPAddress string
+	UserAgent string
 }
 
 // PasswordResetRequestInput triggers reset token creation.
@@ -303,6 +341,112 @@ func (s *Service) Refresh(ctx context.Context, in RefreshInput) (*AuthResult, er
 	}
 
 	return s.issueSessionWithExisting(ctx, sessionEntity, tenantEntity, refreshToken, in.IPAddress, in.UserAgent, s.cfg.Token.DefaultScopes)
+}
+
+// StartGoogleOAuth builds the Google OAuth authorization URL.
+func (s *Service) StartGoogleOAuth(ctx context.Context, in OAuthStartInput) (string, error) {
+	if s.google == nil {
+		return "", ErrProviderNotEnabled
+	}
+	tenantEntity, err := s.lookupTenant(ctx, in.TenantSlug)
+	if err != nil {
+		return "", err
+	}
+
+	payload := state.Payload{
+		TenantSlug:  tenantEntity.Slug,
+		ClientID:    in.ClientID,
+		Flow:        defaultFlow(in.Flow),
+		RedirectURI: in.RedirectURI,
+		Nonce:       randomNonce(),
+	}
+
+	stateToken, err := state.Encode(s.cfg.Security.OAuthStateSecret, payload, oauthStateTTL)
+	if err != nil {
+		return "", fmt.Errorf("encode oauth state: %w", err)
+	}
+
+	s.auditor.Record(ctx, audit.Entry{
+		TenantID:   &tenantEntity.ID,
+		Action:     "auth.oauth.google.start",
+		Resource:   "oauth_state",
+		ResourceID: payload.Nonce,
+		IPAddress:  in.IPAddress,
+		UserAgent:  in.UserAgent,
+		Context: map[string]any{
+			"client_id": payload.ClientID,
+		},
+	})
+
+	return s.google.AuthCodeURL(stateToken), nil
+}
+
+// CompleteGoogleOAuth finalises Google OAuth callback and issues tokens.
+func (s *Service) CompleteGoogleOAuth(ctx context.Context, in OAuthCallbackInput) (*AuthResult, error) {
+	if s.google == nil {
+		return nil, ErrProviderNotEnabled
+	}
+	if in.Code == "" || in.State == "" {
+		return nil, ErrOAuthStateInvalid
+	}
+
+	payload, err := state.Decode(s.cfg.Security.OAuthStateSecret, in.State)
+	if err != nil {
+		return nil, ErrOAuthStateInvalid
+	}
+
+	tenantEntity, err := s.lookupTenant(ctx, payload.TenantSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenResp, err := s.google.Exchange(ctx, in.Code)
+	if err != nil {
+		return nil, err
+	}
+
+	profile, err := s.google.FetchProfile(ctx, tokenResp)
+	if err != nil {
+		return nil, err
+	}
+	if !profile.EmailVerified {
+		return nil, ErrEmailNotVerified
+	}
+	if !s.isDomainAllowed(profile.Email) {
+		return nil, ErrEmailDomainNotAllowed
+	}
+
+	userEntity, err := s.resolveUserFromGoogleProfile(ctx, tenantEntity, profile, tokenResp)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := s.issueSession(ctx, issueSessionInput{
+		User:      userEntity,
+		Tenant:    tenantEntity,
+		ClientID:  payload.ClientID,
+		IPAddress: in.IPAddress,
+		UserAgent: in.UserAgent,
+		Scopes:    s.cfg.Token.DefaultScopes,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.auditor.Record(ctx, audit.Entry{
+		TenantID:   &tenantEntity.ID,
+		UserID:     &userEntity.ID,
+		Action:     "auth.oauth.google.success",
+		Resource:   "user",
+		ResourceID: userEntity.ID.String(),
+		IPAddress:  in.IPAddress,
+		UserAgent:  in.UserAgent,
+		Context: map[string]any{
+			"email": profile.Email,
+		},
+	})
+
+	return result, nil
 }
 
 // RequestPasswordReset creates a reset token (would be emailed in production).
@@ -513,6 +657,209 @@ func (s *Service) issueSessionWithExisting(ctx context.Context, sessionEntity *e
 		RefreshTokenExpiresAt: sessionEntity.ExpiresAt,
 		SessionID:             sessionEntity.ID,
 	}, nil
+}
+
+func (s *Service) resolveUserFromGoogleProfile(ctx context.Context, tenantEntity *ent.Tenant, profile *googleprovider.Profile, token *oauth2.Token) (*ent.User, error) {
+	identity, err := s.entClient.UserIdentity.Query().
+		Where(
+			useridentity.ProviderEQ(googleProviderName),
+			useridentity.ProviderSubjectEQ(profile.Subject),
+		).
+		WithUser().
+		Only(ctx)
+	if err == nil {
+		userEntity := identity.Edges.User
+		if userEntity == nil {
+			userEntity, err = s.entClient.User.Get(ctx, identity.UserID)
+			if err != nil {
+				return nil, fmt.Errorf("load user for identity: %w", err)
+			}
+		}
+		if err := s.ensureMembership(ctx, userEntity.ID, tenantEntity.ID); err != nil {
+			return nil, err
+		}
+		if err := s.updateIdentityTokens(ctx, identity.ID, profile, token); err != nil {
+			return nil, err
+		}
+		if userEntity.PrimaryTenantID == "" {
+			if err := s.entClient.User.UpdateOneID(userEntity.ID).
+				SetPrimaryTenantID(tenantEntity.ID.String()).
+				Exec(ctx); err != nil {
+				s.logger.Warn("failed to set primary tenant from oauth", zap.Error(err))
+			}
+		}
+		return userEntity, nil
+	}
+	if !ent.IsNotFound(err) {
+		return nil, fmt.Errorf("query user identity: %w", err)
+	}
+
+	email := normalizeEmail(profile.Email)
+	userEntity, err := s.entClient.User.Query().
+		Where(
+			user.EmailEQ(email),
+		).
+		Only(ctx)
+	if err != nil {
+		if !ent.IsNotFound(err) {
+			return nil, fmt.Errorf("lookup user by email: %w", err)
+		}
+		userEntity, err = s.entClient.User.Create().
+			SetEmail(email).
+			SetStatus("active").
+			SetPrimaryTenantID(tenantEntity.ID.String()).
+			SetProfile(googleProfileMap(profile)).
+			Save(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("create user from google profile: %w", err)
+		}
+	}
+
+	if err := s.ensureMembership(ctx, userEntity.ID, tenantEntity.ID); err != nil {
+		return nil, err
+	}
+
+	if err := s.createIdentity(ctx, userEntity.ID, profile, token); err != nil {
+		return nil, err
+	}
+
+	return userEntity, nil
+}
+
+func (s *Service) updateIdentityTokens(ctx context.Context, identityID uuid.UUID, profile *googleprovider.Profile, token *oauth2.Token) error {
+	update := s.entClient.UserIdentity.UpdateOneID(identityID).
+		SetProviderEmail(normalizeEmail(profile.Email)).
+		SetEmailVerified(profile.EmailVerified).
+		SetTokenExpiry(tokenExpiry(token)).
+		SetProfile(googleProfileMap(profile)).
+		SetScope(scopeFromToken(token))
+
+	if token.AccessToken != "" {
+		update.SetAccessToken(token.AccessToken)
+	} else {
+		update.ClearAccessToken()
+	}
+	if token.RefreshToken != "" {
+		update.SetRefreshToken(token.RefreshToken)
+	} else {
+		update.ClearRefreshToken()
+	}
+
+	if err := update.Exec(ctx); err != nil {
+		return fmt.Errorf("update identity tokens: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) createIdentity(ctx context.Context, userID uuid.UUID, profile *googleprovider.Profile, token *oauth2.Token) error {
+	identityCreate := s.entClient.UserIdentity.Create().
+		SetUserID(userID).
+		SetProvider(googleProviderName).
+		SetProviderSubject(profile.Subject).
+		SetProviderEmail(normalizeEmail(profile.Email)).
+		SetEmailVerified(profile.EmailVerified).
+		SetTokenExpiry(tokenExpiry(token)).
+		SetScope(scopeFromToken(token)).
+		SetProfile(googleProfileMap(profile))
+
+	if token != nil {
+		if token.AccessToken != "" {
+			identityCreate.SetAccessToken(token.AccessToken)
+		}
+		if token.RefreshToken != "" {
+			identityCreate.SetRefreshToken(token.RefreshToken)
+		}
+	}
+
+	if _, err := identityCreate.Save(ctx); err != nil {
+		return fmt.Errorf("create user identity: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ensureMembership(ctx context.Context, userID, tenantID uuid.UUID) error {
+	exists, err := s.entClient.TenantMembership.Query().
+		Where(
+			tenantmembership.UserID(userID),
+			tenantmembership.TenantID(tenantID),
+		).
+		Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("check tenant membership: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	_, err = s.entClient.TenantMembership.Create().
+		SetUserID(userID).
+		SetTenantID(tenantID).
+		SetRoles([]string{"member"}).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("create tenant membership: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) isDomainAllowed(email string) bool {
+	allowed := s.cfg.Providers.Google.AllowedDomains
+	if len(allowed) == 0 {
+		return true
+	}
+	parts := strings.Split(strings.ToLower(email), "@")
+	if len(parts) != 2 {
+		return false
+	}
+	domain := strings.TrimSpace(parts[1])
+	for _, allowedDomain := range allowed {
+		if strings.EqualFold(domain, strings.TrimSpace(allowedDomain)) {
+			return true
+		}
+	}
+	return false
+}
+
+func tokenExpiry(token *oauth2.Token) time.Time {
+	if token == nil || token.Expiry.IsZero() {
+		return time.Now().Add(5 * time.Minute)
+	}
+	return token.Expiry
+}
+
+func scopeFromToken(token *oauth2.Token) string {
+	if token == nil {
+		return ""
+	}
+	if scope := token.Extra("scope"); scope != nil {
+		return fmt.Sprintf("%v", scope)
+	}
+	return ""
+}
+
+func googleProfileMap(profile *googleprovider.Profile) map[string]any {
+	if profile == nil {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"name":    profile.Name,
+		"picture": profile.Picture,
+		"locale":  profile.Locale,
+	}
+}
+
+func defaultFlow(flow string) string {
+	if flow == "" {
+		return "login"
+	}
+	return strings.ToLower(flow)
+}
+
+func randomNonce() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return uuid.New().String()
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 func (s *Service) validatePassword(password string) error {

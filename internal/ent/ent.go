@@ -20,6 +20,7 @@ import (
 	"github.com/bengobox/auth-service/internal/ent/tenant"
 	"github.com/bengobox/auth-service/internal/ent/tenantmembership"
 	"github.com/bengobox/auth-service/internal/ent/user"
+	"github.com/bengobox/auth-service/internal/ent/useridentity"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -88,6 +89,7 @@ func checkColumn(t, c string) error {
 			tenant.Table:             tenant.ValidColumn,
 			tenantmembership.Table:   tenantmembership.ValidColumn,
 			user.Table:               user.ValidColumn,
+			useridentity.Table:       useridentity.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

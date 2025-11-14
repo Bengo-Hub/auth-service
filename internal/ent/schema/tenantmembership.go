@@ -41,10 +41,12 @@ func (TenantMembership) Edges() []ent.Edge {
 		edge.From("user", User.Type).
 			Ref("memberships").
 			Field("user_id").
+			Unique().
 			Required(),
 		edge.From("tenant", Tenant.Type).
 			Ref("memberships").
 			Field("tenant_id").
+			Unique().
 			Required(),
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/bengobox/auth-service/internal/ent/tenant"
 	"github.com/bengobox/auth-service/internal/ent/tenantmembership"
 	"github.com/bengobox/auth-service/internal/ent/user"
+	"github.com/bengobox/auth-service/internal/ent/useridentity"
 	"github.com/google/uuid"
 )
 
@@ -203,4 +204,36 @@ func init() {
 	userDescID := userFields[0].Descriptor()
 	// user.DefaultID holds the default value on creation for the id field.
 	user.DefaultID = userDescID.Default.(func() uuid.UUID)
+	useridentityFields := schema.UserIdentity{}.Fields()
+	_ = useridentityFields
+	// useridentityDescProvider is the schema descriptor for provider field.
+	useridentityDescProvider := useridentityFields[2].Descriptor()
+	// useridentity.ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
+	useridentity.ProviderValidator = useridentityDescProvider.Validators[0].(func(string) error)
+	// useridentityDescProviderSubject is the schema descriptor for provider_subject field.
+	useridentityDescProviderSubject := useridentityFields[3].Descriptor()
+	// useridentity.ProviderSubjectValidator is a validator for the "provider_subject" field. It is called by the builders before save.
+	useridentity.ProviderSubjectValidator = useridentityDescProviderSubject.Validators[0].(func(string) error)
+	// useridentityDescProviderEmail is the schema descriptor for provider_email field.
+	useridentityDescProviderEmail := useridentityFields[4].Descriptor()
+	// useridentity.ProviderEmailValidator is a validator for the "provider_email" field. It is called by the builders before save.
+	useridentity.ProviderEmailValidator = useridentityDescProviderEmail.Validators[0].(func(string) error)
+	// useridentityDescEmailVerified is the schema descriptor for email_verified field.
+	useridentityDescEmailVerified := useridentityFields[5].Descriptor()
+	// useridentity.DefaultEmailVerified holds the default value on creation for the email_verified field.
+	useridentity.DefaultEmailVerified = useridentityDescEmailVerified.Default.(bool)
+	// useridentityDescLinkedAt is the schema descriptor for linked_at field.
+	useridentityDescLinkedAt := useridentityFields[11].Descriptor()
+	// useridentity.DefaultLinkedAt holds the default value on creation for the linked_at field.
+	useridentity.DefaultLinkedAt = useridentityDescLinkedAt.Default.(func() time.Time)
+	// useridentityDescUpdatedAt is the schema descriptor for updated_at field.
+	useridentityDescUpdatedAt := useridentityFields[12].Descriptor()
+	// useridentity.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	useridentity.DefaultUpdatedAt = useridentityDescUpdatedAt.Default.(func() time.Time)
+	// useridentity.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	useridentity.UpdateDefaultUpdatedAt = useridentityDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// useridentityDescID is the schema descriptor for id field.
+	useridentityDescID := useridentityFields[0].Descriptor()
+	// useridentity.DefaultID holds the default value on creation for the id field.
+	useridentity.DefaultID = useridentityDescID.Default.(func() uuid.UUID)
 }

@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 - Registration/login handlers now emit token pairs together with user/tenant payloads.
 
+## [0.4.0] - 2025-11-14
+### Added
+- Sprint 3 Google OAuth integration with signed state tokens, configurable provider metadata, and allowed-domain enforcement.
+- Ent `user_identities` schema plus persistence for access/refresh tokens, verified email flag, and profile metadata.
+- `/api/v1/auth/oauth/google/start` + `/callback` endpoints with handler/service wiring, plus OAuth helper utilities.
+
+### Changed
+- Auth service now auto-links/creates users from provider profiles, ensures tenant membership, and updates README/config docs for social login setup.
+
 ## [0.2.0] - 2025-11-14
 ### Added
 - Sprint 1 local auth flows: registration, login, password reset request/confirmation, audit logging, login attempt tracking.

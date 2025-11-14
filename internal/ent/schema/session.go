@@ -61,6 +61,7 @@ func (Session) Edges() []ent.Edge {
 		edge.From("user", User.Type).
 			Field("user_id").
 			Ref("sessions").
+			Unique().
 			Required(),
 	}
 }

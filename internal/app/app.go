@@ -14,6 +14,7 @@ import (
 	"github.com/bengobox/auth-service/internal/httpapi/handlers"
 	httpmiddleware "github.com/bengobox/auth-service/internal/httpapi/middleware"
 	"github.com/bengobox/auth-service/internal/password"
+	googleprovider "github.com/bengobox/auth-service/internal/providers/google"
 	"github.com/bengobox/auth-service/internal/services/auth"
 	"github.com/bengobox/auth-service/internal/token"
 	"github.com/redis/go-redis/v9"
@@ -51,6 +52,11 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 		return nil, err
 	}
 
+	googleProvider, err := googleprovider.New(cfg.Providers.Google)
+	if err != nil {
+		return nil, err
+	}
+
 	hasher := password.NewHasher(cfg.Security)
 	auditor := audit.New(entClient, logger)
 
@@ -61,6 +67,7 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 		Config:    cfg,
 		Auditor:   auditor,
 		Logger:    logger,
+		Google:    googleProvider,
 	})
 
 	authHandler := handlers.NewAuthHandler(authService, logger)
@@ -75,6 +82,8 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 			RequestPasswordReset: authHandler.RequestPasswordReset,
 			ConfirmPasswordReset: authHandler.ConfirmPasswordReset,
 			Me:                   authHandler.Me,
+			GoogleOAuthStart:     authHandler.GoogleOAuthStart,
+			GoogleOAuthCallback:  authHandler.GoogleOAuthCallback,
 		},
 		RequireAuthHandler: authMiddleware.RequireAuth,
 	})

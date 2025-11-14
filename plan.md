@@ -86,7 +86,7 @@
 - [x] **Sprint 0 – Foundations:** Server bootstrap (`cmd/server`), structured config loader, zap logging, Redis/Postgres clients, health endpoint, Ent schema (users, tenants, memberships, OAuth clients, audit, sessions, reset tokens, login attempts).
 - [x] **Sprint 1 – Local Auth Basics:** Argon2id hashing, registration/login flows with tenant membership enforcement, password reset issuance & confirmation, audit logging, login attempt tracking, validation + error handling.
 - [x] **Sprint 2 – Token Service:** RSA-backed JWT minting/verification, refresh token rotation with session persistence, `/auth/refresh` + `/auth/me` endpoints, auth middleware, session telemetry updates.
-- [ ] **Sprint 3 – External Providers:** Google OAuth, account linking, social login UI, provider configuration.
+- [x] **Sprint 3 – External Providers:** Google OAuth login/linking, user identity store, signed OAuth state helper, provider configuration & domain gating, `/auth/oauth/google/*` endpoints that mint first-party tokens.
 - [ ] **Sprint 4 – OIDC Compliance:** Authorization Code + PKCE, discovery docs, JWKS, userinfo, consent flows.
 - [ ] **Sprint 5 – Sessions & Logout:** multi-device session management, revocation, global logout propagation, security events.
 - [ ] **Sprint 6 – MFA & Risk Controls:** TOTP, backup codes, policies, integration with notifications for SMS/email OTP.

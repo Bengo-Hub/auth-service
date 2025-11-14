@@ -22,6 +22,8 @@ type AuthService interface {
 	RequestPasswordReset(ctx context.Context, in auth.PasswordResetRequestInput) (string, error)
 	ConfirmPasswordReset(ctx context.Context, in auth.PasswordResetConfirmInput) error
 	GetUser(ctx context.Context, id uuid.UUID) (*ent.User, error)
+	StartGoogleOAuth(ctx context.Context, in auth.OAuthStartInput) (string, error)
+	CompleteGoogleOAuth(ctx context.Context, in auth.OAuthCallbackInput) (*auth.AuthResult, error)
 }
 
 // AuthHandler exposes HTTP endpoints for authentication flows.
@@ -99,6 +101,54 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		ClientID:     req.ClientID,
 		IPAddress:    clientIP(r),
 		UserAgent:    userAgent(r),
+	})
+	if err != nil {
+		h.handleError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.toAuthResponse(result))
+}
+
+// GoogleOAuthStart initiates Google OAuth flow.
+func (h *AuthHandler) GoogleOAuthStart(w http.ResponseWriter, r *http.Request) {
+	var req googleOAuthStartRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid JSON payload", nil)
+		return
+	}
+	authURL, err := h.service.StartGoogleOAuth(r.Context(), auth.OAuthStartInput{
+		TenantSlug:  req.TenantSlug,
+		ClientID:    req.ClientID,
+		Flow:        req.Flow,
+		RedirectURI: req.RedirectURI,
+		IPAddress:   clientIP(r),
+		UserAgent:   userAgent(r),
+	})
+	if err != nil {
+		h.handleError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"authorization_url": authURL,
+	})
+}
+
+// GoogleOAuthCallback finalises Google OAuth login.
+func (h *AuthHandler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	stateParam := r.URL.Query().Get("state")
+	if code == "" || stateParam == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "missing code or state", nil)
+		return
+	}
+
+	result, err := h.service.CompleteGoogleOAuth(r.Context(), auth.OAuthCallbackInput{
+		Code:      code,
+		State:     stateParam,
+		IPAddress: clientIP(r),
+		UserAgent: userAgent(r),
 	})
 	if err != nil {
 		h.handleError(w, r, err)
@@ -188,6 +238,14 @@ func (h *AuthHandler) handleError(w http.ResponseWriter, r *http.Request, err er
 		writeError(w, http.StatusBadRequest, "invalid_token", "password reset token invalid or expired", nil)
 	case errors.Is(err, auth.ErrEmailAlreadyExists):
 		writeError(w, http.StatusConflict, "email_exists", "user with email already exists", nil)
+	case errors.Is(err, auth.ErrProviderNotEnabled):
+		writeError(w, http.StatusBadRequest, "provider_disabled", "oauth provider not enabled", nil)
+	case errors.Is(err, auth.ErrOAuthStateInvalid):
+		writeError(w, http.StatusBadRequest, "invalid_state", "oauth state invalid or expired", nil)
+	case errors.Is(err, auth.ErrEmailNotVerified):
+		writeError(w, http.StatusForbidden, "email_not_verified", "provider email must be verified", nil)
+	case errors.Is(err, auth.ErrEmailDomainNotAllowed):
+		writeError(w, http.StatusForbidden, "email_domain_blocked", "email domain not allowed", nil)
 	default:
 		reqID := middleware.GetReqID(r.Context())
 		h.logger.Error("auth handler error", zap.String("request_id", reqID), zap.Error(err))
@@ -267,4 +325,11 @@ type passwordResetRequest struct {
 type passwordResetConfirmRequest struct {
 	Token       string `json:"token"`
 	NewPassword string `json:"new_password"`
+}
+
+type googleOAuthStartRequest struct {
+	TenantSlug  string `json:"tenant_slug"`
+	ClientID    string `json:"client_id"`
+	Flow        string `json:"flow"`
+	RedirectURI string `json:"redirect_uri"`
 }

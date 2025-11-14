@@ -40,6 +40,7 @@ func (PasswordResetToken) Edges() []ent.Edge {
 		edge.From("user", User.Type).
 			Field("user_id").
 			Ref("password_reset_tokens").
+			Unique().
 			Required(),
 	}
 }

@@ -47,8 +47,10 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`.
   openssl rsa -in config/keys/dev_jwt_private.pem -pubout -out config/keys/dev_jwt_public.pem
   ```
 - Provide Postgres + Redis connection strings via `AUTH_DB_URL` and `AUTH_REDIS_ADDR`. Redis powers rate-limits/blacklists (future sprint) but is already initialised for health checks.
+- To enable Google OAuth, set `AUTH_PROVIDERS_GOOGLE_ENABLED=true` together with `CLIENT_ID`, `CLIENT_SECRET`, and `REDIRECT_URL` (normally `https://auth.bengobox.com/api/v1/auth/oauth/google/callback`).  
+  Use `AUTH_SECURITY_OAUTH_STATE_SECRET` (32+ random bytes) to sign OAuth state tokens and optionally restrict tenants by domain via `AUTH_PROVIDERS_GOOGLE_ALLOWED_DOMAINS=example.com,contoso.com`.
 
-### HTTP Surface (Sprint 2)
+### HTTP Surface (Sprint 3)
 
 | Method | Path                              | Description                     |
 |--------|-----------------------------------|---------------------------------|
@@ -56,6 +58,8 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`.
 | POST   | `/api/v1/auth/login`              | Email/password login            |
 | POST   | `/api/v1/auth/refresh`            | Rotate refresh token + JWT      |
 | POST   | `/api/v1/auth/password-reset/*`   | Request/confirm reset tokens    |
+| POST   | `/api/v1/auth/oauth/google/start` | Generate Google OAuth URL       |
+| GET    | `/api/v1/auth/oauth/google/callback` | Finish Google OAuth login    |
 | GET    | `/api/v1/auth/me`                 | Returns authenticated profile   |
 | GET    | `/healthz`                        | Liveness probe                  |
 

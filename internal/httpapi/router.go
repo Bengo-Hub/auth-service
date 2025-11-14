@@ -24,6 +24,8 @@ type AuthHandlers struct {
 	RequestPasswordReset http.HandlerFunc
 	ConfirmPasswordReset http.HandlerFunc
 	Me                   http.HandlerFunc
+	GoogleOAuthStart     http.HandlerFunc
+	GoogleOAuthCallback  http.HandlerFunc
 }
 
 // NewRouter wires HTTP routes.
@@ -52,6 +54,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/refresh", deps.AuthHandlers.Refresh)
 			r.Post("/password-reset/request", deps.AuthHandlers.RequestPasswordReset)
 			r.Post("/password-reset/confirm", deps.AuthHandlers.ConfirmPasswordReset)
+			r.Post("/oauth/google/start", deps.AuthHandlers.GoogleOAuthStart)
+			r.Get("/oauth/google/callback", deps.AuthHandlers.GoogleOAuthCallback)
 
 			r.Group(func(r chi.Router) {
 				if deps.RequireAuthHandler != nil {

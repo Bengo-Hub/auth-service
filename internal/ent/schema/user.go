@@ -50,5 +50,6 @@ func (User) Edges() []ent.Edge {
 		edge.To("memberships", TenantMembership.Type),
 		edge.To("sessions", Session.Type),
 		edge.To("password_reset_tokens", PasswordResetToken.Type),
+		edge.To("identities", UserIdentity.Type),
 	}
 }
