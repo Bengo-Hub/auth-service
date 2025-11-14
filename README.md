@@ -50,6 +50,11 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`.
 - To enable Google OAuth, set `AUTH_PROVIDERS_GOOGLE_ENABLED=true` together with `CLIENT_ID`, `CLIENT_SECRET`, and `REDIRECT_URL` (normally `https://auth.bengobox.com/api/v1/auth/oauth/google/callback`).  
   Use `AUTH_SECURITY_OAUTH_STATE_SECRET` (32+ random bytes) to sign OAuth state tokens and optionally restrict tenants by domain via `AUTH_PROVIDERS_GOOGLE_ALLOWED_DOMAINS=example.com,contoso.com`.
 
+### Documentation
+
+- Developer API guide: [docs/developer-api.md](docs/developer-api.md)
+- Local testing with Docker (Redis): [docs/local-testing.md](docs/local-testing.md)
+
 ### HTTP Surface (Sprint 4)
 
 | Method | Path                              | Description                     |
@@ -101,7 +106,7 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`.
 - **Treasury:** receives metering events and returns feature entitlements for subscription plans.
 - **Notifications:** delivers OTP and security alerts.
 
-Refer to `docs/erd.md` and `plan.md` for module-level design.
+Refer to [docs/erd.md](docs/erd.md) and [plan.md](plan.md)` for module-level design.
 
 ## Status
 

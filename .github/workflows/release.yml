@@ -1,0 +1,120 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            docker.io/codevertex/auth-service:${{ github.sha }}
+            docker.io/codevertex/auth-service:latest
+
+      - name: Short SHA
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Checkout devops-k8s
+        uses: actions/checkout@v4
+        with:
+          repository: Bengo-Hub/devops-k8s
+          token: ${{ secrets.GH_TOKEN_DEVOPS }}
+          path: devops-k8s
+
+      - name: Ensure auth-service app files exist
+        run: |
+          mkdir -p devops-k8s/apps/auth-service
+          if [ ! -f devops-k8s/apps/auth-service/app.yaml ]; then
+            cat > devops-k8s/apps/auth-service/app.yaml <<'YAML'
+            apiVersion: argoproj.io/v1alpha1
+            kind: Application
+            metadata:
+              name: auth-service
+              namespace: argocd
+            spec:
+              project: default
+              source:
+                repoURL: https://github.com/Bengo-Hub/devops-k8s.git
+                targetRevision: main
+                path: charts/app
+                helm:
+                  valueFiles:
+                    - ../../apps/auth-service/values.yaml
+              destination:
+                server: https://kubernetes.default.svc
+                namespace: auth
+              syncPolicy:
+                automated:
+                  prune: true
+                  selfHeal: true
+                syncOptions:
+                  - CreateNamespace=true
+            YAML
+          fi
+          if [ ! -f devops-k8s/apps/auth-service/values.yaml ]; then
+            cat > devops-k8s/apps/auth-service/values.yaml <<'YAML'
+            image:
+              repository: docker.io/codevertex/auth-service
+              tag: latest
+              pullSecrets:
+                - name: registry-credentials
+            service:
+              port: 4101
+              targetPort: 4101
+            healthCheck:
+              enabled: true
+              readiness:
+                httpGet:
+                  path: /healthz
+                  port: http
+                initialDelaySeconds: 5
+                periodSeconds: 10
+                timeoutSeconds: 3
+              liveness:
+                httpGet:
+                  path: /healthz
+                  port: http
+                initialDelaySeconds: 10
+                periodSeconds: 20
+                timeoutSeconds: 5
+            YAML
+          fi
+
+      - name: Bump image tag in devops-k8s
+        run: |
+          sed -i "s/tag:.*/tag: ${{ steps.vars.outputs.short_sha }}/" devops-k8s/apps/auth-service/values.yaml
+
+      - name: Create PR to devops-k8s
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GH_TOKEN_DEVOPS }}
+          commit-message: "chore(auth-service): bump image tag to ${{ steps.vars.outputs.short_sha }}"
+          title: "chore(auth-service): bump image tag to ${{ steps.vars.outputs.short_sha }}"
+          branch: ci/bump-auth-service-${{ steps.vars.outputs.short_sha }}
+          base: main
+          path: devops-k8s
+
