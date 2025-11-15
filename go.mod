@@ -1,6 +1,6 @@
 module github.com/bengobox/auth-service
 
-go 1.25.4
+go 1.24.0
 
 require (
 	entgo.io/ent v0.14.5
