@@ -4,11 +4,15 @@ This guide explains how to integrate other services with the auth-service for ce
 
 ## Overview
 
-The auth-service handles all authentication logic for all services within the BengoBox ecosystem. Services should:
+The auth-service handles all authentication logic for all services within the BengoBox ecosystem. There are two approaches for user account creation:
 
-1. **Redirect users to auth-service** for registration and login
-2. **Receive redirects back** after successful authentication with tokens
-3. **Use JWT tokens** for API authentication via the shared auth-client
+### Approach 1: Direct Registration (Recommended)
+**Redirect users to auth-service** for registration and login, then receive redirects back with tokens.
+
+### Approach 2: User Sync Endpoint
+**Sync user creation** with auth-service when services create users internally (e.g., guest checkout, admin-created accounts).
+
+Both approaches ensure users can authenticate via SSO across all services.
 
 ## Authentication Flows
 

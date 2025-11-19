@@ -11,7 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   - `POST /api/v1/admin/api-keys` - Generate new API key for a service
   - `GET /api/v1/admin/api-keys` - List all API keys (filtered by service)
   - `GET /api/v1/admin/api-keys/validate` - Validate API key (internal use)
+- **User Sync Endpoint:** Added `POST /api/v1/admin/users/sync` endpoint for services to sync user creation with auth-service
+  - Allows services that create users internally to ensure SSO compatibility
+  - Requires API key authentication
+  - Automatically ensures tenant membership exists
+  - Supports optional password (if not provided, user must set via password reset flow)
 - **Swagger UI Bearer Prefix:** Swagger UI now automatically adds "Bearer " prefix when users paste JWT tokens
+- **Registration Redirect Support:** Register endpoint now supports `redirect_uri` parameter for redirecting users back to their service after account creation
 - **Service-Specific Redirects:** Added `redirect_uri` support to registration, login, and OAuth flows
   - Services can specify `redirect_uri` to receive users back after authentication
   - Tokens are included in URL fragment (SPAs) or query params (traditional apps)

@@ -108,6 +108,7 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`. In pr
 | POST   | `/api/v1/admin/api-keys`         | Generate API key                |
 | GET    | `/api/v1/admin/api-keys`         | List API keys                   |
 | GET    | `/api/v1/admin/api-keys/validate`| Validate API key (internal)     |
+| POST   | `/api/v1/admin/users/sync`       | Sync user creation (API key)    |
 
 ### MFA
 - TOTP enrollment/confirmation and backup codes under `/api/v1/auth/mfa/*` (requires auth).

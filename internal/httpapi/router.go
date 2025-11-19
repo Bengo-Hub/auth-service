@@ -55,6 +55,7 @@ type AuthHandlers struct {
 	AdminGenerateAPIKey      http.HandlerFunc
 	AdminListAPIKeys         http.HandlerFunc
 	AdminValidateAPIKey      http.HandlerFunc
+	AdminSyncUser            http.HandlerFunc
 }
 
 // NewRouter wires HTTP routes.
@@ -141,6 +142,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api-keys", deps.AuthHandlers.AdminGenerateAPIKey)
 			r.Get("/api-keys", deps.AuthHandlers.AdminListAPIKeys)
 			r.Get("/api-keys/validate", deps.AuthHandlers.AdminValidateAPIKey)
+			r.Post("/users/sync", deps.AuthHandlers.AdminSyncUser)
 		})
 	})
 

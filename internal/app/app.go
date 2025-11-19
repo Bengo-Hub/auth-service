@@ -96,7 +96,7 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 	oidcHandler := handlers.NewOIDCHandler(cfg, oidcService, authMiddleware, tokenSvc, logger)
 	mfaService := mfa.New(entClient, cfg.Token.Issuer)
 	mfaHandler := handlers.NewMFAHandler(mfaService, logger)
-	adminHandler := handlers.NewAdminHandler(entClient, tokenSvc, logger)
+	adminHandler := handlers.NewAdminHandler(entClient, tokenSvc, logger, hasher)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		HealthHandler:  handlers.Health,
@@ -114,7 +114,7 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 			GitHubOAuthStart:         authHandler.GitHubOAuthStart,
 			GitHubOAuthCallback:      authHandler.GitHubOAuthCallback,
 			MicrosoftOAuthStart:      authHandler.MicrosoftOAuthStart,
-			MicrosoftOAuthCallback:   authHandler.MicrosoftOAuthCallback,	
+			MicrosoftOAuthCallback:   authHandler.MicrosoftOAuthCallback,
 			WellKnownConfig:          oidcHandler.WellKnownConfig,
 			JWKS:                     oidcHandler.JWKS,
 			Authorize:                oidcHandler.Authorize,
@@ -131,6 +131,7 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*App, err
 			AdminGenerateAPIKey:      adminHandler.GenerateAPIKey,
 			AdminListAPIKeys:         adminHandler.ListAPIKeys,
 			AdminValidateAPIKey:      adminHandler.ValidateAPIKey,
+			AdminSyncUser:            adminHandler.SyncUser,
 			AdminCreateTenant:        adminHandler.CreateTenant,
 			AdminListTenants:         adminHandler.ListTenants,
 			AdminCreateClient:        adminHandler.CreateClient,

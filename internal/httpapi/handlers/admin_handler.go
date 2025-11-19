@@ -5,12 +5,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bengobox/auth-service/internal/ent"
 	"github.com/bengobox/auth-service/internal/ent/oauthclient"
 	"github.com/bengobox/auth-service/internal/ent/tenant"
+	"github.com/bengobox/auth-service/internal/ent/tenantmembership"
+	"github.com/bengobox/auth-service/internal/ent/user"
 	authmiddleware "github.com/bengobox/auth-service/internal/httpapi/middleware"
+	"github.com/bengobox/auth-service/internal/password"
 	"github.com/bengobox/auth-service/internal/services/entitlements"
 	"github.com/bengobox/auth-service/internal/services/usage"
 	"github.com/bengobox/auth-service/internal/token"
@@ -25,15 +29,17 @@ type AdminHandler struct {
 	entSvc *entitlements.Service
 	useSvc *usage.Service
 	tokens *token.Service
+	hasher *password.Hasher
 }
 
-func NewAdminHandler(entClient *ent.Client, tokens *token.Service, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(entClient *ent.Client, tokens *token.Service, logger *zap.Logger, hasher *password.Hasher) *AdminHandler {
 	return &AdminHandler{
 		ent:    entClient,
 		logger: logger,
 		entSvc: entitlements.New(entClient),
 		useSvc: usage.New(entClient),
 		tokens: tokens,
+		hasher: hasher,
 	}
 }
 
@@ -372,4 +378,201 @@ func (h *AdminHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeError(w, http.StatusUnauthorized, "unauthorized", "invalid API key", nil)
+}
+
+// User Sync - allows services to sync user creation with auth-service
+type userSyncRequest struct {
+	Email      string         `json:"email"`
+	Password   string         `json:"password,omitempty"` // Optional: if not provided, user must set password via reset flow
+	TenantSlug string         `json:"tenant_slug"`
+	Profile    map[string]any `json:"profile,omitempty"`
+	Service    string         `json:"service"` // Service name creating the user
+}
+
+type userSyncResponse struct {
+	UserID   string `json:"user_id"`
+	Email    string `json:"email"`
+	TenantID string `json:"tenant_id"`
+	Created  bool   `json:"created"` // true if user was created, false if already existed
+	Message  string `json:"message"`
+}
+
+// SyncUser allows services to sync user creation with auth-service.
+// This endpoint is used when services create users internally and need to ensure
+// the user exists in auth-service for SSO authentication.
+func (h *AdminHandler) SyncUser(w http.ResponseWriter, r *http.Request) {
+	// Require API key authentication for this endpoint
+	apiKey := r.Header.Get("X-API-Key")
+	if apiKey == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing API key", nil)
+		return
+	}
+
+	// Validate API key
+	items, err := h.ent.OAuthClient.Query().All(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to validate API key", nil)
+		return
+	}
+
+	var validAPIKey bool
+	var serviceName string
+	for _, item := range items {
+		if item.ClientSecret == apiKey {
+			if item.Metadata != nil {
+				if metaType, ok := item.Metadata["type"].(string); ok && metaType == "api_key" {
+					validAPIKey = true
+					serviceName, _ = item.Metadata["service"].(string)
+					break
+				}
+			}
+		}
+	}
+
+	if !validAPIKey {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid API key", nil)
+		return
+	}
+
+	var req userSyncRequest
+	if err := decodeJSON(r, &req); err != nil || req.Email == "" || req.TenantSlug == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "email and tenant_slug are required", nil)
+		return
+	}
+
+	// Use service name from API key if not provided in request
+	if req.Service == "" {
+		req.Service = serviceName
+	}
+
+	// Normalize email
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Check if user already exists
+	existingUser, err := h.ent.User.Query().
+		Where(user.EmailEQ(email)).
+		Only(r.Context())
+
+	if err == nil {
+		// User exists, check tenant membership
+		tenantEntity, err := h.ent.Tenant.Query().
+			Where(tenant.SlugEQ(req.TenantSlug)).
+			Only(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "tenant not found", nil)
+			return
+		}
+
+		// Ensure tenant membership exists
+		_, err = h.ent.TenantMembership.Query().
+			Where(
+				tenantmembership.UserIDEQ(existingUser.ID),
+				tenantmembership.TenantIDEQ(tenantEntity.ID),
+			).
+			Only(r.Context())
+
+		if err != nil {
+			// Create membership if it doesn't exist
+			_, err = h.ent.TenantMembership.Create().
+				SetUserID(existingUser.ID).
+				SetTenantID(tenantEntity.ID).
+				SetRoles([]string{"member"}).
+				Save(r.Context())
+			if err != nil && !ent.IsConstraintError(err) {
+				writeError(w, http.StatusInternalServerError, "server_error", "failed to create tenant membership", nil)
+				return
+			}
+		}
+
+		writeJSON(w, http.StatusOK, userSyncResponse{
+			UserID:   existingUser.ID.String(),
+			Email:    existingUser.Email,
+			TenantID: tenantEntity.ID.String(),
+			Created:  false,
+			Message:  "user already exists, tenant membership ensured",
+		})
+		return
+	}
+
+	if !ent.IsNotFound(err) {
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to check user existence", nil)
+		return
+	}
+
+	// User doesn't exist, create it
+	tenantEntity, err := h.ent.Tenant.Query().
+		Where(tenant.SlugEQ(req.TenantSlug)).
+		Only(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "tenant not found", nil)
+		return
+	}
+
+	// Hash password if provided
+	var passwordHash *string
+	if req.Password != "" {
+		if h.hasher == nil {
+			writeError(w, http.StatusInternalServerError, "server_error", "password hasher not configured", nil)
+			return
+		}
+		hashed, err := h.hasher.Hash(req.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "server_error", "failed to hash password", nil)
+			return
+		}
+		passwordHash = &hashed
+	}
+
+	createUser := h.ent.User.Create().
+		SetEmail(email).
+		SetStatus("active").
+		SetPrimaryTenantID(tenantEntity.ID.String()).
+		SetProfile(coalesceMap(req.Profile))
+
+	if passwordHash != nil {
+		createUser.SetPasswordHash(*passwordHash)
+	}
+
+	userEntity, err := createUser.Save(r.Context())
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			writeError(w, http.StatusConflict, "conflict", "user already exists", nil)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to create user", nil)
+		return
+	}
+
+	// Create tenant membership
+	_, err = h.ent.TenantMembership.Create().
+		SetUserID(userEntity.ID).
+		SetTenantID(tenantEntity.ID).
+		SetRoles([]string{"member"}).
+		Save(r.Context())
+	if err != nil && !ent.IsConstraintError(err) {
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to create tenant membership", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, userSyncResponse{
+		UserID:   userEntity.ID.String(),
+		Email:    userEntity.Email,
+		TenantID: tenantEntity.ID.String(),
+		Created:  true,
+		Message:  "user created successfully",
+	})
+}
+
+func coalesceMap(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+func optionalString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
