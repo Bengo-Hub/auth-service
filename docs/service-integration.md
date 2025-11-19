@@ -214,6 +214,80 @@ The auth-service automatically detects the format based on the redirect URI:
 - URLs ending with `/`, `/dashboard`, `/home`, or containing `#` → Fragment format
 - Other URLs → Query parameter format
 
+## User Sync Endpoint (For Services Creating Users Internally)
+
+If your service creates users internally (e.g., guest checkout, admin-created accounts), you should sync them with auth-service to ensure SSO compatibility:
+
+```http
+POST /api/v1/admin/users/sync
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "email": "user@example.com",
+  "password": "optional-password",
+  "tenant_slug": "your-tenant-slug",
+  "profile": {
+    "first_name": "John",
+    "last_name": "Doe"
+  },
+  "service": "your-service-name"
+}
+```
+
+**Response:**
+```json
+{
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "tenant_id": "uuid",
+  "created": true,
+  "message": "user created successfully"
+}
+```
+
+**Notes:**
+- Requires API key authentication (`X-API-Key` header)
+- If user already exists, ensures tenant membership exists
+- Password is optional - if not provided, user must set password via password reset flow
+- Service name is automatically detected from API key if not provided
+
+**Example Integration:**
+
+```go
+// In your service's user creation handler
+func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    // Create user in your local database
+    localUser, err := h.repo.CreateUser(ctx, userData)
+    if err != nil {
+        // handle error
+    }
+
+    // Sync with auth-service
+    syncReq := map[string]interface{}{
+        "email":       localUser.Email,
+        "password":    "", // Optional - user will set via reset flow
+        "tenant_slug": localUser.TenantSlug,
+        "profile":     localUser.Profile,
+        "service":     "your-service-name",
+    }
+    
+    reqBody, _ := json.Marshal(syncReq)
+    req, _ := http.NewRequest("POST", "https://auth.codevertex.local:4101/api/v1/admin/users/sync", bytes.NewBuffer(reqBody))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("X-API-Key", os.Getenv("AUTH_SERVICE_API_KEY"))
+    
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        // Log error but don't fail user creation
+        log.Warn("failed to sync user with auth-service", zap.Error(err))
+    }
+    defer resp.Body.Close()
+    
+    // Continue with your service logic
+}
+```
+
 ## Security Considerations
 
 1. **Validate Redirect URIs**: In production, validate `redirect_uri` against your OAuth client's allowed redirect URIs
@@ -221,6 +295,8 @@ The auth-service automatically detects the format based on the redirect URI:
 3. **Token Storage**: Store tokens securely (httpOnly cookies for web apps, secure storage for mobile)
 4. **Token Refresh**: Implement token refresh logic using the `refresh_token`
 5. **CORS**: Configure CORS on auth-service to allow requests from your service domains
+6. **API Keys**: Store API keys securely and rotate them regularly
+7. **User Sync**: Always sync user creation with auth-service to ensure SSO compatibility
 
 ## Example: Complete Integration
 
