@@ -35,7 +35,10 @@ func SwaggerUI(w http.ResponseWriter, r *http.Request) {
           url: specUrl,
           dom_id: '#swagger-ui',
           presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
-          layout: "BaseLayout"
+          layout: "BaseLayout",
+          deepLinking: true,
+          filter: true,
+          persistAuthorization: true
         })
       }
     </script>

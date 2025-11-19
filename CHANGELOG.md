@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Standardized Swagger documentation path to `/v1/docs` (previously `/api/v1/docs`)
 - Updated OpenAPI specification servers to use HTTPS URLs for local development
 - Swagger UI handler now uses protocol-aware URL detection for HTTPS compatibility
+- Swagger UI now displays standard header with Explore button and URL input field
+- Added `deepLinking`, `filter`, and `persistAuthorization` options to Swagger UI configuration
 
 ## [0.3.0] - 2025-11-14
 ### Added
