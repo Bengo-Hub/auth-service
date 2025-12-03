@@ -6,17 +6,15 @@ RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# Build all binaries: server, migrate, and seed
+# Build binaries: server and seed (migrations run on startup automatically)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/auth ./cmd/server && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/auth-migrate ./cmd/migrate && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/auth-seed ./cmd/seed
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata && addgroup -S app && adduser -S app -G app
 WORKDIR /app
-# Copy all binaries
+# Copy binaries (migrate removed - migrations run on startup)
 COPY --from=builder /bin/auth /usr/local/bin/auth
-COPY --from=builder /bin/auth-migrate /usr/local/bin/auth-migrate
 COPY --from=builder /bin/auth-seed /usr/local/bin/auth-seed
 COPY config/keys ./config/keys
 # TLS certificates directory (optional, can be mounted as volume)
