@@ -72,7 +72,7 @@ Endpoints default to `http://localhost:4101`. Adjust via `AUTH_HTTP_PORT`. In pr
   - Default admin for quick testing:
     - Email: `admin@codevertexitsolutions.com`
     - Password: `ChangeMe123!`
-    - Tenant: `bengobox`
+    - Tenant: `codevertex` ⚠️ **Important: Use `codevertex` not `bengobox`**
 
 ### HTTP Surface (Sprint 4)
 
