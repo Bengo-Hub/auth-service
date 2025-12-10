@@ -14,7 +14,7 @@
    - JWT/opaque token issuance (access, ID, refresh) with asymmetric signing (JWKS) and token introspection.
    - Discovery endpoints (`/.well-known/openid-configuration`, `/.well-known/jwks.json`).
 2. **Identity & Account Management**
-   - Local accounts (email/password with bcrypt/argon2), passwordless login (magic links), invite/onboarding flows.
+   - Local accounts (email/password with Argon2id via shared library), passwordless login (magic links), invite/onboarding flows.
    - Social login (Google, Microsoft, Apple, GitHub, configurable providers), account linking/unlinking.
    - Multi-tenant support: organisations, roles, groups, tenant membership claims.
 3. **Security Hardening**
@@ -102,6 +102,36 @@
 - Enterprise federation (SAML 2.0, Azure AD B2B).
 - Behavioral analytics, UEBA (User and Entity Behavior Analytics).
 - Privacy features (account anonymisation, GDPR data export portals).
+
+### Password Hashing - Shared Library Adoption ✓ COMPLETE
+
+**Status:** December 2025 - Implemented
+
+The auth-service has been updated to use the centralized shared password hasher library (`github.com/Bengo-Hub/shared-password-hasher@v0.1.0`) instead of maintaining its own custom Argon2id implementation.
+
+**Implementation Details:**
+- **File:** `internal/password/argon2.go` - now wraps shared library
+- **Dependency:** Added to `go.mod`: `github.com/Bengo-Hub/shared-password-hasher v0.1.0`
+- **Parameters:** Uses shared library defaults (m=65536, t=3, p=2, keylen=32)
+- **Compatibility:** 100% backwards compatible with existing password hashes
+- **Migration Path:** Existing config parameters (Argon2Time, Argon2Memory, etc.) are retained but ignored
+
+**Benefits:**
+1. **Single Source of Truth:** Password hashing logic centralized in shared library
+2. **Consistency:** Auth-service, TruLoad backend, and all Go services use identical algorithm
+3. **Reduced Code:** Eliminated 100+ lines of custom hashing logic
+4. **Maintainability:** Future parameter updates only need to happen in shared library
+5. **Cross-Service Compatibility:** All services can verify hashes from any other service
+
+**For Other Services:**
+- **Go Services (ordering, subscription, projects, notifications, pos, iot):** Already delegate to auth-service, no direct hashing needed
+- **ISPBilling (Python):** Uses bcrypt - migration planned (see recommendations below)
+- **pharmacymis (Python/Django):** Uses Django PBKDF2 - migration planned (see recommendations below)
+- **TruLoad Backend (.NET):** Has compatible Argon2id implementation (.NET-specific, cannot import Go library)
+
+**Future Considerations:**
+- If shared library parameters need to change, update `github.com/Bengo-Hub/shared-password-hasher` and all services will automatically adopt
+- Config parameters in auth-service (Argon2Time, Argon2Memory) remain for backwards compatibility but are superseded by shared library
 
 ### Immediate Actions
 - Align with treasury on entitlement payloads and billing events.
